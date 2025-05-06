@@ -1,6 +1,5 @@
 FROM python:3.12
 
-Install system dependencies for Playwright
 
 RUN apt-get update && apt-get install -y 
 libglib2.0-0 
@@ -20,13 +19,13 @@ libcups2
 && apt-get clean 
 && rm -rf /var/lib/apt/lists/*
 
-Install Playwright and its dependencies
+
 
 RUN pip install playwright==1.47.0 && 
 playwright install-deps && 
 playwright install chromium
 
-Set working directory
+
 
 WORKDIR /app
 
