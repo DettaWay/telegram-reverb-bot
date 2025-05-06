@@ -16,12 +16,17 @@ RUN apt-get update && apt-get install -y \
     libcairo2 \
     libasound2 \
     libcups2 \
+    libdrm2 \
+    libfontconfig1 \
+    libfreetype6 \
+    libgtk-3-0 \
+    libpangocairo-1.0-0 \
+    libx11-xcb1 \
+    libxcursor1 \
+    libxi6 \
+    libxtst6 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Playwright and Chromium
-RUN pip install playwright==1.47.0 && \
-    playwright install chromium
 
 # Set working directory
 WORKDIR /app
@@ -29,6 +34,9 @@ WORKDIR /app
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Playwright browsers
+RUN python -m playwright install chromium
 
 # Copy bot script
 COPY bot.py .
