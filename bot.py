@@ -3,6 +3,8 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from playwright.async_api import async_playwright
 import asyncio
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
 import os
 
 # Enable logging
@@ -13,6 +15,18 @@ logger = logging.getLogger(__name__)
 
 # URL of the Delay & Reverb Time Calculator
 CALCULATOR_URL = "https://anotherproducer.com/online-tools-for-musicians/delay-reverb-time-calculator/"
+
+# Simple HTTP server for health check
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot is running")
+
+def run_health_check():
+    server = HTTPServer(("0.0.0.0", 8080), HealthCheckHandler)
+    server.serve_forever()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a welcome message when the /start command is issued."""
@@ -85,6 +99,10 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def main() -> None:
     """Run the bot."""
+    # Start health check server in a separate thread
+    health_thread = threading.Thread(target=run_health_check, daemon=True)
+    health_thread.start()
+
     # Get bot token from environment variable
     bot_token = os.getenv('BOT_TOKEN')
     if not bot_token:
