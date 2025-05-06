@@ -1,4 +1,3 @@
-
 FROM python:3.12
 
 # Install system dependencies for Playwright
@@ -20,16 +19,15 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Playwright and its dependencies
+# Install Playwright and Chromium
 RUN pip install playwright==1.47.0 && \
-    playwright install-deps && \
     playwright install chromium
 
 # Set working directory
 WORKDIR /app
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt . 
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy bot script
