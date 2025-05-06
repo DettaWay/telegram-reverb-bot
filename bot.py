@@ -3,6 +3,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from playwright.async_api import async_playwright
 import asyncio
+import os
 
 # Enable logging
 logging.basicConfig(
@@ -22,28 +23,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def scrape_calculator(bpm: str) -> str:
     """Scrape the calculator page for the given BPM and return the results."""
+    await asyncio.sleep(1)  # Delay to avoid rate limits
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
-
-            # Navigate to the calculator page
             await page.goto(CALCULATOR_URL)
-
-            # Wait for the BPM input field to be visible
             await page.wait_for_selector('input[name="bpm"]', timeout=10000)
-
-            # Input the BPM value
             await page.fill('input[name="bpm"]', bpm)
-
-            # Wait for the tables to update (give time for JavaScript to process)
             await page.wait_for_timeout(1000)
-
-            # Scrape the reverb settings table
             reverb_table = await page.query_selector('table')
             reverb_rows = await reverb_table.query_selector_all('tr')
             reverb_data = ["Reverb Settings:"]
-            for row in reverb_rows[1:]:  # Skip header row
+            for row in reverb_rows[1:]:
                 cells = await row.query_selector_all('td')
                 if len(cells) == 4:
                     size = await cells[0].inner_text()
@@ -53,12 +45,10 @@ async def scrape_calculator(bpm: str) -> str:
                     reverb_data.append(
                         f"{size}: Pre-Delay: {pre_delay}, Decay Time: {decay}, Total: {total}"
                     )
-
-            # Scrape the delay settings table
             delay_table = await page.query_selector_all('table')[1]
             delay_rows = await delay_table.query_selector_all('tr')
-            delay_data = ["\\nDelay Settings:"]
-            for row in delay_rows[1:]:  # Skip header row
+            delay_data = ["\nDelay Settings:"]
+            for row in delay_rows[1:]:
                 cells = await row.query_selector_all('td')
                 if len(cells) == 4:
                     note = await cells[0].inner_text()
@@ -68,12 +58,8 @@ async def scrape_calculator(bpm: str) -> str:
                     delay_data.append(
                         f"{note}: Notes: {notes}, Dotted: {dotted}, Triplets: {triplets}"
                     )
-
             await browser.close()
-
-            # Combine and return the results
-            return "\\n".join(reverb_data + delay_data)
-
+            return "\n".join(reverb_data + delay_data)
     except Exception as e:
         logger.error(f"Error scraping calculator: {e}")
         return "Sorry, I couldn't fetch the data. Please try again later."
@@ -81,8 +67,6 @@ async def scrape_calculator(bpm: str) -> str:
 async def handle_bpm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle user messages containing BPM values."""
     bpm = update.message.text.strip()
-
-    # Validate BPM (must be a positive number)
     try:
         bpm_float = float(bpm)
         if bpm_float <= 0:
@@ -91,14 +75,8 @@ async def handle_bpm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     except ValueError:
         await update.message.reply_text("Please send a valid BPM number (e.g., 120).")
         return
-
-    # Inform user that processing is starting
     await update.message.reply_text(f"Fetching reverb and delay settings for BPM {bpm}...")
-
-    # Scrape the calculator
     result = await scrape_calculator(bpm)
-
-    # Send the results
     await update.message.reply_text(result)
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -107,8 +85,11 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def main() -> None:
     """Run the bot."""
-    # Replace 'YOUR_BOT_TOKEN' with your actual Telegram bot token
-    bot_token = '7826142507:AAHzjIylO9zhE1vhsyqoBi4X8Z_1FnCgFz8'
+    # Get bot token from environment variable
+    bot_token = os.getenv('BOT_TOKEN')
+    if not bot_token:
+        logger.error("BOT_TOKEN environment variable not set")
+        os._exit(1)
 
     # Create the Application
     application = Application.builder().token(bot_token).build()
@@ -118,8 +99,14 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bpm))
     application.add_error_handler(error_handler)
 
-    # Start the bot
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Start the bot with error handling for conflicts
+    try:
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        logger.error(f"Polling failed: {e}")
+        if "Conflict" in str(e):
+            logger.error("Another bot instance is running. Stopping this instance.")
+            os._exit(1)
 
 if __name__ == '__main__':
     main()
